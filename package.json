@@ -4,10 +4,12 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "dev": "set DEBUG=mediasoup:* && ts-node src"
+    "dev": "ts-node src"
   },
   "dependencies": {
+    "@types/cors": "^2.8.18",
     "chokidar": "^4.0.3",
+    "cors": "^2.8.5",
     "express": "^5.1.0",
     "mediasoup": "^3.15.8",
     "ws": "^8.18.2"
