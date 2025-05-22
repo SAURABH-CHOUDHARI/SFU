@@ -1,30 +1,40 @@
 import express from 'express';
-import *as  http from 'http';
+import * as  http from 'http';
 import * as Websocket from 'ws';
+import * as path from 'path';
 import { WebSocketConnection } from './lib/ws';
-import path from 'node:path';
-import { watchHLS, isStreamLive } from './hlsWatcher';
+import { watchHLS, getLiveStreamFiles } from './lib/hlsWatcher';
+import liveHls_path from '../liveHlsPath'
+import cors from 'cors';
+import { clearDirectoryContents } from './lib/clearDirectoryContents';
+
 
 
 
 const main = async () => {
+    await clearDirectoryContents(liveHls_path); 
     const app = express();
     const port = 8000;
 
-    const HLS_DIR = path.join(__dirname, 'live-hls');
-    watchHLS(HLS_DIR);
+    app.use(cors())
 
-    app.get('/api/stream/', (req, res) => {
-        if (isStreamLive()) {
+    watchHLS(liveHls_path);
+
+    app.get('/api/streams', (req, res) => {
+        const files = getLiveStreamFiles();
+
+        if (files.length > 0) {
             res.json({
                 status: 'live',
-                // This URL points to the m3u8 playlist being served statically
-                streamUrl: `http://localhost:${port}/live-hls/stream.m3u8`,
+                streams: files,
             });
         } else {
             res.json({ status: 'offline' });
         }
     });
+
+    app.use('/hls', express.static(path.resolve(liveHls_path)));
+
 
     const server = http.createServer(app);
     const websocket = new Websocket.Server({ server, path: '/ws' });
