@@ -2,6 +2,10 @@ import { createWorker } from "../lib/worker";
 import WebSocket from "ws";
 import { createWebRtcTransport } from "./createWebRtcTransport";
 import { types } from "mediasoup";
+import { createFfmpegTransportForStream } from './ffmpegTransport';
+import { startFfmpegTranscoding } from "./ffmpegTranscode"
+import path from 'node:path';
+
 
 let mediasoupRouter: types.Router;
 const peers = new Map<WebSocket, {
@@ -98,8 +102,31 @@ const WebSocketConnection = async (websock: WebSocket.Server) => {
         const { kind, rtpParameters } = event;
         const newProducer = await peer.producerTransport.produce({ kind, rtpParameters });
 
+        // Set up FFmpeg transport if needed
+        const ffmpegTransport = await createFfmpegTransportForStream(mediasoupRouter, newProducer.id);
+
+        const consumer = await ffmpegTransport.consume({
+            producerId: newProducer.id,
+            rtpCapabilities: mediasoupRouter.rtpCapabilities,
+            paused: false
+        });
+
         peer.producer = newProducer;
         producers.push({ ws, producer: newProducer });
+
+        const ip = ffmpegTransport.tuple.localIp;
+        const port = ffmpegTransport.tuple.localPort;
+
+        const streamName = `stream${producers.length}`; // e.g. stream0, stream1
+
+
+        startFfmpegTranscoding({
+            ip,
+            port,
+            streamName,
+            kind
+        });
+
 
         send(ws, 'produced', { id: newProducer.id });
         broadcast(webSocket, 'newProducer', 'new user', ws);
@@ -182,18 +209,18 @@ const WebSocketConnection = async (websock: WebSocket.Server) => {
     };
 
     const broadcast = (
-    ws: WebSocket.Server,
-    type: string,
-    msg: any,
-    exclude?: WebSocket
-) => {
-    const message = JSON.stringify({ type, data: msg });
-    ws.clients.forEach(client => {
-        if (client !== exclude && client.readyState === WebSocket.OPEN) {
-            client.send(message);
-        }
-    });
-};
+        ws: WebSocket.Server,
+        type: string,
+        msg: any,
+        exclude?: WebSocket
+    ) => {
+        const message = JSON.stringify({ type, data: msg });
+        ws.clients.forEach(client => {
+            if (client !== exclude && client.readyState === WebSocket.OPEN) {
+                client.send(message);
+            }
+        });
+    };
 
     const IsJsonString = (str: string) => {
         try {
